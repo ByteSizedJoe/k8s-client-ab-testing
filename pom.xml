@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>k8s-client-ab-harness</artifactId>
+  <version>0.1.0</version>
+  <name>Kubernetes Client A/B Harness</name>
+  <description>Compare Fabric8 Kubernetes client Vert.x 4 vs Vert.x 5 transports under identical workload</description>
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Default versions; overridden by profiles where needed -->
+    <fabric8.client.version>6.10.0</fabric8.client.version>
+    <vertx.version>4.5.10</vertx.version>
+    <main.class>com.example.harness.Main</main.class>
+  </properties>
+
+  <dependencies>
+    <!-- Fabric8 core client API (transport is selected by profile-specific dependency) -->
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>kubernetes-client</artifactId>
+      <version>${fabric8.client.version}</version>
+    </dependency>
+
+    <!-- Simple logging to stdout -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.13</version>
+    </dependency>
+
+    <!-- Optional: annotations for cleaner code (not required at runtime) -->
+    <dependency>
+      <groupId>org.jetbrains</groupId>
+      <artifactId>annotations</artifactId>
+      <version>24.1.0</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <release>${maven.compiler.target}</release>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.1</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>${main.class}</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>vertx-4</id>
+      <properties>
+        <transport.id>vertx4</transport.id>
+        <vertx.version>4.5.10</vertx.version>
+      </properties>
+      <dependencies>
+        <!-- Vert.x 4 transport for Fabric8 client -->
+        <dependency>
+          <groupId>io.fabric8</groupId>
+          <artifactId>kubernetes-httpclient-vertx</artifactId>
+          <version>${fabric8.client.version}</version>
+        </dependency>
+        <!-- Ensure a consistent Vert.x 4 version on classpath -->
+        <dependency>
+          <groupId>io.vertx</groupId>
+          <artifactId>vertx-core</artifactId>
+          <version>${vertx.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
+      <id>vertx-5</id>
+      <properties>
+        <transport.id>vertx5</transport.id>
+        <vertx.version>5.1.4</vertx.version>
+      </properties>
+      <dependencies>
+        <!-- Vert.x 5 transport for Fabric8 client -->
+        <dependency>
+          <groupId>io.fabric8</groupId>
+          <artifactId>kubernetes-httpclient-vertx5</artifactId>
+          <version>${fabric8.client.version}</version>
+        </dependency>
+        <!-- Ensure a consistent Vert.x 5 version on classpath -->
+        <dependency>
+          <groupId>io.vertx</groupId>
+          <artifactId>vertx-core</artifactId>
+          <version>${vertx.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+</project>
