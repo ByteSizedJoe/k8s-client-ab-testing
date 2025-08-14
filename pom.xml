@@ -14,10 +14,35 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- Default versions; overridden by profiles where needed -->
-    <fabric8.client.version>6.10.0</fabric8.client.version>
+    <fabric8.client.version>joe-test-1</fabric8.client.version>
     <vertx.version>4.5.10</vertx.version>
-    <main.class>com.example.harness.Main</main.class>
+    <main.class>dev.bytesizedjoe.Main</main.class>
+    <!-- Align all Jackson artifacts to avoid NoSuchMethodError mismatches -->
+    <jackson.version>2.17.1</jackson.version>
+
+    <!-- A/B harness run defaults (can be overridden via -D) -->
+    <ab.namespace>ab-harness</ab.namespace>
+    <ab.repeats>3</ab.repeats>
+    <ab.warmup>15</ab.warmup>
+    <ab.duration>120</ab.duration>
+    <ab.threads>4</ab.threads>
+    <ab.out>${project.basedir}/out</ab.out>
+    <!-- JVM args for harness runs -->
+    <ab.exec.jvmArgs>-XX:NativeMemoryTracking=summary -XX:+UnlockDiagnosticVMOptions</ab.exec.jvmArgs>
   </properties>
+
+  <!-- Ensure all transitive Jackson modules align on the same version -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <!-- Fabric8 core client API (transport is selected by profile-specific dependency) -->
@@ -25,6 +50,13 @@
       <groupId>io.fabric8</groupId>
       <artifactId>kubernetes-client</artifactId>
       <version>${fabric8.client.version}</version>
+        <exclusions>
+          <!-- Avoid pulling Vert.x 4 transport transitively; we add the desired transport explicitly per profile -->
+          <exclusion>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-httpclient-vertx</artifactId>
+          </exclusion>
+        </exclusions>
     </dependency>
 
     <!-- Simple logging to stdout -->
@@ -35,11 +67,34 @@
     </dependency>
 
     <!-- Optional: annotations for cleaner code (not required at runtime) -->
+    <!-- Lombok to reduce boilerplate -->
     <dependency>
-      <groupId>org.jetbrains</groupId>
-      <artifactId>annotations</artifactId>
-      <version>24.1.0</version>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <version>1.18.32</version>
       <scope>provided</scope>
+    </dependency>
+
+    <!-- jspecify for nullability annotations -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <version>1.0.0</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Test dependencies -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>5.12.0</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -52,11 +107,49 @@
     </resources>
     <plugins>
       <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.5.0</version>
+        <configuration>
+          <mainClass>${main.class}</mainClass>
+          <classpathScope>runtime</classpathScope>
+          <systemProperties>
+            <systemProperty>
+              <key>transport.id</key>
+              <value>${transport.id}</value>
+            </systemProperty>
+          </systemProperties>
+          <arguments>
+            <argument>--label</argument>
+            <argument>${transport.id}</argument>
+            <argument>--namespace</argument>
+            <argument>${ab.namespace}</argument>
+            <argument>--out</argument>
+            <argument>${ab.out}</argument>
+            <argument>--repeats</argument>
+            <argument>${ab.repeats}</argument>
+            <argument>--warmup</argument>
+            <argument>${ab.warmup}</argument>
+            <argument>--duration</argument>
+            <argument>${ab.duration}</argument>
+            <argument>--threads</argument>
+            <argument>${ab.threads}</argument>
+          </arguments>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.13.0</version>
         <configuration>
           <release>${maven.compiler.target}</release>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+              <version>1.18.32</version>
+            </path>
+          </annotationProcessorPaths>
         </configuration>
       </plugin>
 
@@ -82,6 +175,18 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
+          <includes>
+            <include>**/*Test.java</include>
+          </includes>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 
@@ -91,6 +196,7 @@
       <properties>
         <transport.id>vertx4</transport.id>
         <vertx.version>4.5.10</vertx.version>
+        <exec.args.jvm>${ab.exec.jvmArgs}</exec.args.jvm>
       </properties>
       <dependencies>
         <!-- Vert.x 4 transport for Fabric8 client -->
@@ -112,13 +218,14 @@
       <id>vertx-5</id>
       <properties>
         <transport.id>vertx5</transport.id>
-        <vertx.version>5.1.4</vertx.version>
+        <vertx.version>5.0.1</vertx.version>
+        <exec.args.jvm>${ab.exec.jvmArgs}</exec.args.jvm>
       </properties>
       <dependencies>
         <!-- Vert.x 5 transport for Fabric8 client -->
         <dependency>
           <groupId>io.fabric8</groupId>
-          <artifactId>kubernetes-httpclient-vertx5</artifactId>
+          <artifactId>kubernetes-httpclient-vertx-5</artifactId>
           <version>${fabric8.client.version}</version>
         </dependency>
         <!-- Ensure a consistent Vert.x 5 version on classpath -->
@@ -128,6 +235,45 @@
           <version>${vertx.version}</version>
         </dependency>
       </dependencies>
+    </profile>
+    <profile>
+      <id>ab-compare</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>ab-compare-script</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>bash</executable>
+                  <workingDirectory>${project.basedir}</workingDirectory>
+                  <arguments>
+                    <argument>scripts/ab_compare.sh</argument>
+                    <argument>--namespace</argument>
+                    <argument>${ab.namespace}</argument>
+                    <argument>--repeats</argument>
+                    <argument>${ab.repeats}</argument>
+                    <argument>--warmup</argument>
+                    <argument>${ab.warmup}</argument>
+                    <argument>--duration</argument>
+                    <argument>${ab.duration}</argument>
+                    <argument>--threads</argument>
+                    <argument>${ab.threads}</argument>
+                    <argument>--out</argument>
+                    <argument>${ab.out}</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>

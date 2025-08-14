@@ -8,6 +8,7 @@ JVM_OPTS=(
   -XX:NativeMemoryTracking=summary
 )
 
+# shellcheck disable=SC2054
 ARGS=(
   --namespace ab-harness \
   --out out \
@@ -30,6 +31,7 @@ build_and_run() {
   echo "Building with profile $profile..."
   mvn -q -P "$profile" -DskipTests package
   local JAR
+  # shellcheck disable=SC2012
   JAR=$(ls -1 target/k8s-client-ab-harness-*-SNAPSHOT.jar 2>/dev/null || ls -1 target/k8s-client-ab-harness-*.jar | head -n1)
   echo "Running $profile..."
   JAVA_HOME=${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which javac))))}
